@@ -14,20 +14,48 @@ class BookingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
+    final cards = [
+      for (final b in app.bookings)
+        if (app.trainerById(b.trainerId) != null) _BookingCard(booking: b),
+    ];
     return Scaffold(
-      appBar: AppBar(title: Text(app.t('myBookings')), actions: const [LanguageButton()]),
-      body: app.bookings.isEmpty
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Text(app.t('noBookings'), textAlign: TextAlign.center),
-              ),
-            )
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-              children: [for (final b in app.bookings) _BookingCard(booking: b)],
-            ),
+      appBar: AppBar(
+        title: Text(app.t('myBookings')),
+        actions: [
+          IconButton(
+            tooltip: app.t('pullToRefresh'),
+            icon: const Icon(Icons.refresh),
+            onPressed: () => _refresh(context),
+          ),
+          const LanguageButton(),
+        ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: () => _refresh(context),
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          children: cards.isEmpty
+              ? [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 80),
+                    child: Text(app.t('noBookings'), textAlign: TextAlign.center),
+                  ),
+                ]
+              : cards,
+        ),
+      ),
     );
+  }
+
+  Future<void> _refresh(BuildContext context) async {
+    final app = AppScope.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await app.refreshBookings();
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(app.t('loadError'))));
+    }
   }
 }
 
@@ -35,14 +63,27 @@ class _BookingCard extends StatelessWidget {
   final Booking booking;
   const _BookingCard({required this.booking});
 
+  Future<void> _run(BuildContext context, Future<void> Function() action) async {
+    final app = AppScope.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await action();
+    } catch (e) {
+      debugPrint('Booking action failed: $e');
+      messenger.showSnackBar(SnackBar(content: Text(app.t('saveError'))));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
     final b = booking;
-    final trainer = trainerById(b.trainerId);
+    final trainer = app.trainerById(b.trainerId)!;
     final category = categoryById(trainer.categoryId);
     final separator = app.isArabic ? '، ' : ', ';
-    final when = '${b.days.map((d) => app.text(kDays[d]!)).join(separator)} · ${app.text(kTimes[b.timeOfDay]!)}';
+    final dayNames = b.days.where(kDays.containsKey).map((d) => app.text(kDays[d]!)).join(separator);
+    final timeName = kTimes[b.timeOfDay] == null ? '' : app.text(kTimes[b.timeOfDay]!);
+    final when = [dayNames, timeName].where((x) => x.isNotEmpty).join(' · ');
     final age = b.childAge == null ? '' : ' (${b.childAge} ${app.t('years')})';
 
     return Container(
@@ -72,16 +113,9 @@ class _BookingCard extends StatelessWidget {
           const SizedBox(height: 10),
           Text(app.t('pendingNote'), style: const TextStyle(fontSize: 12, color: AppColors.muted)),
           const SizedBox(height: 8),
-          OutlinedButton(onPressed: () => app.cancel(b.id), child: Text(app.t('cancel'))),
-          const SizedBox(height: 6),
-          TextButton(
-            onPressed: () {
-              app.simulateConfirm(b.id);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('${app.t('confirmedToast')} · ${app.text(trainer.name)}')),
-              );
-            },
-            child: Text(app.t('demoConfirm'), style: const TextStyle(color: AppColors.muted)),
+          OutlinedButton(
+            onPressed: () => _run(context, () => app.cancel(b.id)),
+            child: Text(app.t('cancel')),
           ),
         ],
         if (b.status == BookingStatus.alternativeOffered) ...[
@@ -94,21 +128,20 @@ class _BookingCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
             ),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Text('${app.t('proposedTime')}: ${b.alternativeTime == null ? '' : app.text(b.alternativeTime!)}',
-                  style: const TextStyle(fontSize: 13)),
+              Text('${app.t('proposedTime')}: ${b.alternativeTime ?? ''}', style: const TextStyle(fontSize: 13)),
               const SizedBox(height: 10),
               Row(children: [
                 Expanded(
                   child: FilledButton(
                     style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(44)),
-                    onPressed: () => app.acceptAlternative(b.id),
+                    onPressed: () => _run(context, () => app.respondToAlternative(b.id, true)),
                     child: Text(app.t('accept')),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: () => app.declineAlternative(b.id),
+                    onPressed: () => _run(context, () => app.respondToAlternative(b.id, false)),
                     child: Text(app.t('decline')),
                   ),
                 ),

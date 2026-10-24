@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../app_state.dart';
-import '../data/sample_data.dart';
 import '../models.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -18,6 +17,7 @@ class RateScreen extends StatefulWidget {
 class _RateScreenState extends State<RateScreen> {
   int _stars = 0;
   bool _showError = false;
+  bool _sending = false;
   final _comment = TextEditingController();
 
   @override
@@ -26,22 +26,32 @@ class _RateScreenState extends State<RateScreen> {
     super.dispose();
   }
 
-  void _submit() {
+  Future<void> _submit() async {
+    if (_sending) return;
     if (_stars == 0) {
       setState(() => _showError = true);
       return;
     }
     final app = AppScope.of(context);
-    app.markRated(widget.booking.id);
     final messenger = ScaffoldMessenger.of(context);
-    Navigator.of(context).pop();
-    messenger.showSnackBar(SnackBar(content: Text(app.t('reviewPublished'))));
+    final navigator = Navigator.of(context);
+    setState(() => _sending = true);
+    try {
+      await app.submitReview(widget.booking, _stars, _comment.text.trim());
+      navigator.pop();
+      messenger.showSnackBar(SnackBar(content: Text(app.t('reviewPublished'))));
+    } catch (e) {
+      debugPrint('Review failed: $e');
+      messenger.showSnackBar(SnackBar(content: Text(app.t('saveError'))));
+      if (mounted) setState(() => _sending = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
-    final trainer = trainerById(widget.booking.trainerId);
+    final trainer = app.trainerById(widget.booking.trainerId);
+    if (trainer == null) return const Scaffold();
 
     return Scaffold(
       appBar: AppBar(title: Text(app.t('rateTitle')), actions: const [LanguageButton()]),
@@ -89,7 +99,7 @@ class _RateScreenState extends State<RateScreen> {
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-          child: FilledButton(onPressed: _submit, child: Text(app.t('submitReview'))),
+          child: FilledButton(onPressed: _sending ? null : _submit, child: Text(app.t('submitReview'))),
         ),
       ),
     );

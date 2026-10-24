@@ -1,12 +1,26 @@
 import 'package:flutter/material.dart';
 
-/// A piece of text in English and Arabic.
+/// A piece of text in English and Arabic (falls back to the other language if one is empty).
 class L {
   final String en;
   final String ar;
   const L(this.en, this.ar);
 
-  String get(String lang) => lang == 'ar' ? ar : en;
+  String get(String lang) {
+    if (lang == 'ar') return ar.isNotEmpty ? ar : en;
+    return en.isNotEmpty ? en : ar;
+  }
+}
+
+String _s(dynamic v) => v == null ? '' : v.toString();
+int? _i(dynamic v) => v == null ? null : num.tryParse(v.toString())?.toInt();
+double _d(dynamic v) => v == null ? 0 : (num.tryParse(v.toString())?.toDouble() ?? 0);
+L _l(Map<String, dynamic> m, String key) => L(_s(m['${key}_en']), _s(m['${key}_ar']));
+
+Color _color(dynamic hex) {
+  final h = _s(hex).replaceAll('#', '');
+  final v = int.tryParse(h.length == 6 ? 'FF$h' : h, radix: 16);
+  return v == null ? const Color(0xFF1E2A44) : Color(v);
 }
 
 class Category {
@@ -34,8 +48,16 @@ class Slot {
 class Review {
   final L author;
   final int stars;
-  final L text;
-  const Review(this.author, this.stars, this.text);
+  final String text;
+  final bool verified;
+  const Review(this.author, this.stars, this.text, this.verified);
+
+  factory Review.fromMap(Map<String, dynamic> m) => Review(
+        _l(m, 'author_label'),
+        _i(m['stars']) ?? 0,
+        _s(m['comment']),
+        m['booking_id'] != null,
+      );
 }
 
 class Trainer {
@@ -45,14 +67,12 @@ class Trainer {
   final L area;
   final double rating;
   final int reviewCount;
-  final double distanceKm;
   final int pricePerSession; // EGP
   final int yearsExperience;
   final L ages;
   final L about;
   final List<Slot> slots;
   final List<L> areas;
-  final List<Review> reviews;
   final Color color;
 
   const Trainer({
@@ -62,20 +82,55 @@ class Trainer {
     required this.area,
     required this.rating,
     required this.reviewCount,
-    required this.distanceKm,
     required this.pricePerSession,
     required this.yearsExperience,
     required this.ages,
     required this.about,
     required this.slots,
     required this.areas,
-    required this.reviews,
     required this.color,
   });
+
+  factory Trainer.fromMap(Map<String, dynamic> m) {
+    final slots = <Slot>[];
+    for (final e in (m['slots'] as List? ?? const [])) {
+      final s = Map<String, dynamic>.from(e as Map);
+      slots.add(Slot(L(_s(s['day_en']), _s(s['day_ar'])), L(_s(s['hours_en']), _s(s['hours_ar']))));
+    }
+    final areas = <L>[];
+    for (final e in (m['areas'] as List? ?? const [])) {
+      final a = Map<String, dynamic>.from(e as Map);
+      areas.add(L(_s(a['en']), _s(a['ar'])));
+    }
+    return Trainer(
+      id: _s(m['id']),
+      name: _l(m, 'name'),
+      categoryId: _s(m['category_id']),
+      area: _l(m, 'area'),
+      rating: _d(m['rating']),
+      reviewCount: _i(m['review_count']) ?? 0,
+      pricePerSession: _i(m['price_egp']) ?? 0,
+      yearsExperience: _i(m['years_experience']) ?? 0,
+      ages: _l(m, 'ages'),
+      about: _l(m, 'about'),
+      slots: slots,
+      areas: areas,
+      color: _color(m['color']),
+    );
+  }
 }
 
-/// The same statuses the operator dashboard and the future trainer app use.
+/// The same statuses the operator dashboard and the future trainer mode use.
 enum BookingStatus { newRequest, contacting, alternativeOffered, confirmed, declined, cancelled }
+
+const _statusFromDb = {
+  'new': BookingStatus.newRequest,
+  'contacting': BookingStatus.contacting,
+  'alternative_offered': BookingStatus.alternativeOffered,
+  'confirmed': BookingStatus.confirmed,
+  'declined': BookingStatus.declined,
+  'cancelled': BookingStatus.cancelled,
+};
 
 class Booking {
   final String id;
@@ -89,7 +144,7 @@ class Booking {
   final String notes;
   final DateTime createdAt;
   BookingStatus status;
-  L? alternativeTime;
+  String? alternativeTime;
   bool rated;
 
   Booking({
@@ -108,6 +163,37 @@ class Booking {
     this.rated = false,
   });
 
-  bool get isPending =>
-      status == BookingStatus.newRequest || status == BookingStatus.contacting;
+  bool get isPending => status == BookingStatus.newRequest || status == BookingStatus.contacting;
+
+  factory Booking.fromMap(Map<String, dynamic> m) {
+    final review = m['reviews'];
+    final alt = _s(m['alternative_time']);
+    return Booking(
+      id: _s(m['id']),
+      trainerId: _s(m['trainer_id']),
+      childName: _s(m['child_name']),
+      childAge: _i(m['child_age']),
+      days: (m['days'] as List? ?? const []).map((e) => e.toString()).toList(),
+      timeOfDay: m['time_of_day'] == null ? 'evening' : _s(m['time_of_day']),
+      place: m['place'] == null ? 'home' : _s(m['place']),
+      area: _s(m['area']),
+      notes: _s(m['notes']),
+      createdAt: DateTime.tryParse(_s(m['created_at'])) ?? DateTime.now(),
+      status: _statusFromDb[_s(m['status'])] ?? BookingStatus.newRequest,
+      alternativeTime: alt.isEmpty ? null : alt,
+      rated: review is List ? review.isNotEmpty : review != null,
+    );
+  }
+
+  /// Fields a parent sends when creating a request.
+  Map<String, dynamic> toInsertMap() => {
+        'trainer_id': trainerId,
+        'child_name': childName,
+        'child_age': childAge,
+        'days': days,
+        'time_of_day': timeOfDay,
+        'place': place,
+        'area': area,
+        'notes': notes,
+      };
 }

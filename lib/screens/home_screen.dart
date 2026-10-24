@@ -31,7 +31,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
-    final nearby = [...kTrainers]..sort((a, b) => a.distanceKm.compareTo(b.distanceKm));
+    final top = app.trainers.take(3).toList();
 
     return Scaffold(
       appBar: AppBar(
@@ -110,12 +110,23 @@ class _HomeScreenState extends State<HomeScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              SectionTitle(app.t('nearYou')),
+              SectionTitle(app.t('topTrainers')),
               TextButton(onPressed: () => _openResults(), child: Text(app.t('seeAll'))),
             ],
           ),
           const SizedBox(height: 6),
-          for (final t in nearby.take(3)) TrainerCard(trainer: t),
+          if (app.loading)
+            const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))
+          else if (app.loadError != null)
+            Column(children: [
+              Text(app.t('loadError'), textAlign: TextAlign.center),
+              const SizedBox(height: 10),
+              OutlinedButton(onPressed: app.load, child: Text(app.t('retry'))),
+            ])
+          else if (top.isEmpty)
+            Text(app.t('noTrainers'), style: const TextStyle(color: AppColors.muted))
+          else
+            for (final t in top) TrainerCard(trainer: t),
         ],
       ),
     );

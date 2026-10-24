@@ -39,12 +39,15 @@ class TrainerAvatar extends StatelessWidget {
 
 class RatingLine extends StatelessWidget {
   final Trainer trainer;
-  final bool showDistance;
-  const RatingLine({super.key, required this.trainer, this.showDistance = true});
+  const RatingLine({super.key, required this.trainer});
 
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
+    if (trainer.reviewCount == 0) {
+      return Text(app.t('newTrainer'),
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.accent));
+    }
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -54,11 +57,6 @@ class RatingLine extends StatelessWidget {
             style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: AppColors.navy)),
         const SizedBox(width: 4),
         Text('(${trainer.reviewCount})', style: const TextStyle(fontSize: 12, color: AppColors.muted)),
-        if (showDistance) ...[
-          const SizedBox(width: 8),
-          Text('${trainer.distanceKm.toStringAsFixed(1)} ${app.t('km')}',
-              style: const TextStyle(fontSize: 12, color: AppColors.muted)),
-        ],
       ],
     );
   }

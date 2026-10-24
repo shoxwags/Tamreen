@@ -44,7 +44,7 @@ class TrainerProfileScreen extends StatelessWidget {
                     style: const TextStyle(color: AppColors.muted)),
                 const SizedBox(height: 4),
                 Row(children: [
-                  RatingLine(trainer: trainer, showDistance: false),
+                  RatingLine(trainer: trainer),
                   const SizedBox(width: 4),
                   Text(app.t('reviews'), style: const TextStyle(fontSize: 12, color: AppColors.muted)),
                 ]),
@@ -118,31 +118,7 @@ class TrainerProfileScreen extends StatelessWidget {
           const SizedBox(height: 18),
           SectionTitle(app.t('parentsSay')),
           const SizedBox(height: 8),
-          for (final r in trainer.reviews)
-            Container(
-              margin: const EdgeInsets.only(bottom: 10),
-              padding: const EdgeInsets.all(14),
-              decoration: panelDecoration(),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                  Text(app.text(r.author), style: const TextStyle(fontWeight: FontWeight.w600)),
-                  Row(children: [
-                    for (var i = 1; i <= 5; i++)
-                      Icon(i <= r.stars ? Icons.star_rounded : Icons.star_outline_rounded,
-                          size: 16, color: AppColors.star),
-                  ]),
-                ]),
-                const SizedBox(height: 6),
-                Text(app.text(r.text), style: const TextStyle(height: 1.5)),
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(color: const Color(0xFFDCFCE7), borderRadius: BorderRadius.circular(999)),
-                  child: Text(app.t('verifiedBooking'),
-                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF166534))),
-                ),
-              ]),
-            ),
+          _ReviewsSection(trainerId: trainer.id),
         ],
       ),
       bottomNavigationBar: SafeArea(
@@ -170,6 +146,73 @@ class TrainerProfileScreen extends StatelessWidget {
           ]),
         ),
       ),
+    );
+  }
+}
+
+class _ReviewsSection extends StatefulWidget {
+  final String trainerId;
+  const _ReviewsSection({required this.trainerId});
+
+  @override
+  State<_ReviewsSection> createState() => _ReviewsSectionState();
+}
+
+class _ReviewsSectionState extends State<_ReviewsSection> {
+  Future<List<Review>>? _future;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _future ??= AppScope.of(context).repo.fetchReviews(widget.trainerId);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    return FutureBuilder<List<Review>>(
+      future: _future,
+      builder: (context, snap) {
+        if (snap.connectionState != ConnectionState.done) {
+          return const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator()));
+        }
+        final reviews = snap.data ?? const <Review>[];
+        if (reviews.isEmpty) {
+          return Text(app.t('noReviews'), style: const TextStyle(color: AppColors.muted));
+        }
+        return Column(children: [
+          for (final r in reviews)
+            Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(14),
+              decoration: panelDecoration(),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                  Expanded(child: Text(app.text(r.author), style: const TextStyle(fontWeight: FontWeight.w600))),
+                  Row(children: [
+                    for (var i = 1; i <= 5; i++)
+                      Icon(i <= r.stars ? Icons.star_rounded : Icons.star_outline_rounded,
+                          size: 16, color: AppColors.star),
+                  ]),
+                ]),
+                if (r.text.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(r.text, style: const TextStyle(height: 1.5)),
+                ],
+                if (r.verified) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration:
+                        BoxDecoration(color: const Color(0xFFDCFCE7), borderRadius: BorderRadius.circular(999)),
+                    child: Text(app.t('verifiedBooking'),
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF166534))),
+                  ),
+                ],
+              ]),
+            ),
+        ]);
+      },
     );
   }
 }

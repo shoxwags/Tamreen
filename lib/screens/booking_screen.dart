@@ -23,6 +23,7 @@ class _BookingScreenState extends State<BookingScreen> {
   String _time = 'evening';
   String _place = 'home';
   bool _showError = false;
+  bool _sending = false;
 
   @override
   void dispose() {
@@ -33,14 +34,18 @@ class _BookingScreenState extends State<BookingScreen> {
     super.dispose();
   }
 
-  void _submit() {
+  Future<void> _submit() async {
+    if (_sending) return;
     if (_childName.text.trim().isEmpty || _days.isEmpty) {
       setState(() => _showError = true);
       return;
     }
     final app = AppScope.of(context);
-    app.addBooking(Booking(
-      id: 'b${DateTime.now().millisecondsSinceEpoch}',
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    setState(() => _sending = true);
+    final draft = Booking(
+      id: '',
       trainerId: widget.trainer.id,
       childName: _childName.text.trim(),
       childAge: int.tryParse(_childAge.text.trim()),
@@ -51,8 +56,15 @@ class _BookingScreenState extends State<BookingScreen> {
       area: _area.text.trim(),
       notes: _notes.text.trim(),
       createdAt: DateTime.now(),
-    ));
-    Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const RequestSentScreen()));
+    );
+    try {
+      await app.addBooking(draft);
+      navigator.pushReplacement(MaterialPageRoute(builder: (_) => const RequestSentScreen()));
+    } catch (e) {
+      debugPrint('Booking failed: $e');
+      messenger.showSnackBar(SnackBar(content: Text(app.t('saveError'))));
+      if (mounted) setState(() => _sending = false);
+    }
   }
 
   Widget _label(String text) => Padding(
@@ -163,7 +175,13 @@ class _BookingScreenState extends State<BookingScreen> {
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-          child: FilledButton(onPressed: _submit, child: Text(app.t('send'))),
+          child: FilledButton(
+            onPressed: _sending ? null : _submit,
+            child: _sending
+                ? const SizedBox(
+                    width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
+                : Text(app.t('send')),
+          ),
         ),
       ),
     );

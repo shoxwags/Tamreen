@@ -1,21 +1,59 @@
 import 'package:flutter/material.dart';
 
-import 'data/sample_data.dart';
+import 'data/repository.dart';
 import 'models.dart';
 import 'strings.dart';
 
-/// App-wide state: language, current tab and the parent's bookings.
-/// Bookings are kept in memory for now; they move to Supabase in the next step.
+/// App-wide state: language, current tab, trainers and the parent's bookings.
 class AppState extends ChangeNotifier {
+  final Repository repo = Repository();
+
   String lang = 'en';
   int tabIndex = 0;
-  final List<Booking> bookings = sampleBookings();
+  List<Trainer> trainers = [];
+  List<Booking> bookings = [];
+  bool loading = true;
+  String? loadError;
 
   bool get isArabic => lang == 'ar';
   String t(String key) => tr(lang, key);
   String text(L value) => value.get(lang);
 
   String price(int egp) => isArabic ? '$egp ${t('currency')}' : '${t('currency')} $egp';
+
+  Trainer? trainerById(String id) {
+    for (final tr in trainers) {
+      if (tr.id == id) return tr;
+    }
+    return null;
+  }
+
+  /// Loads everything from the database. Called at start-up and on "Try again".
+  Future<void> load() async {
+    loading = true;
+    loadError = null;
+    notifyListeners();
+    try {
+      trainers = await repo.fetchTrainers();
+      try {
+        await repo.ensureSignedIn();
+        bookings = await repo.fetchMyBookings();
+      } catch (e) {
+        // Browsing still works if sign-in fails; booking will show the error.
+        debugPrint('Sign-in or bookings failed: $e');
+      }
+    } catch (e) {
+      loadError = e.toString();
+    }
+    loading = false;
+    notifyListeners();
+  }
+
+  Future<void> refreshBookings() async {
+    await repo.ensureSignedIn();
+    bookings = await repo.fetchMyBookings();
+    notifyListeners();
+  }
 
   void toggleLanguage() {
     lang = isArabic ? 'en' : 'ar';
@@ -27,27 +65,29 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void addBooking(Booking booking) {
-    bookings.insert(0, booking);
+  Future<void> addBooking(Booking draft) async {
+    await repo.ensureSignedIn();
+    final saved = await repo.createBooking(draft);
+    bookings.insert(0, saved);
     notifyListeners();
   }
 
-  void _update(String id, void Function(Booking b) change) {
-    final b = bookings.firstWhere((x) => x.id == id);
-    change(b);
-    notifyListeners();
+  Future<void> cancel(String id) async {
+    await repo.cancelBooking(id);
+    await refreshBookings();
   }
 
-  void cancel(String id) => _update(id, (b) => b.status = BookingStatus.cancelled);
+  Future<void> respondToAlternative(String id, bool accept) async {
+    await repo.respondToAlternative(id, accept);
+    await refreshBookings();
+  }
 
-  void acceptAlternative(String id) => _update(id, (b) => b.status = BookingStatus.confirmed);
-
-  void declineAlternative(String id) => _update(id, (b) => b.status = BookingStatus.cancelled);
-
-  /// Demo only: what the operator's "Confirm" button will do from the dashboard.
-  void simulateConfirm(String id) => _update(id, (b) => b.status = BookingStatus.confirmed);
-
-  void markRated(String id) => _update(id, (b) => b.rated = true);
+  Future<void> submitReview(Booking booking, int stars, String comment) async {
+    await repo.addReview(booking: booking, stars: stars, comment: comment);
+    booking.rated = true;
+    trainers = await repo.fetchTrainers();
+    notifyListeners();
+  }
 }
 
 /// Makes [AppState] available to every screen: `AppScope.of(context)`.

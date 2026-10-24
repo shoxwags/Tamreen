@@ -33,12 +33,18 @@ jobs:
         run: |
           flutter create . --platforms=android --org com.tamreen --project-name tamreen
           sed -i 's/android:label="tamreen"/android:label="Tamreen"/' android/app/src/main/AndroidManifest.xml
+          # The app needs the internet to reach the database.
+          sed -i 's#<application#<uses-permission android:name="android.permission.INTERNET"/>\n    <application#' android/app/src/main/AndroidManifest.xml
+          grep -n "INTERNET\|android:label" android/app/src/main/AndroidManifest.xml
 
       - name: Get packages
         run: flutter pub get
 
       - name: Check the code
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Run tests
+        run: flutter test
 
       - name: Build the app (APK)
         run: |

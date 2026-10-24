@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app_state.dart';
+import 'config.dart';
 import 'screens/shell.dart';
 import 'theme.dart';
 
-void main() => runApp(const TamreenApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Supabase.initialize(url: supabaseUrl, anonKey: supabasePublishableKey);
+  runApp(const TamreenApp());
+}
 
 class TamreenApp extends StatefulWidget {
   const TamreenApp({super.key});
@@ -16,6 +22,12 @@ class TamreenApp extends StatefulWidget {
 
 class _TamreenAppState extends State<TamreenApp> {
   final AppState _state = AppState();
+
+  @override
+  void initState() {
+    super.initState();
+    _state.load();
+  }
 
   @override
   void dispose() {

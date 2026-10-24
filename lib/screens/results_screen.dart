@@ -18,7 +18,7 @@ class ResultsScreen extends StatefulWidget {
 class _ResultsScreenState extends State<ResultsScreen> {
   String? _categoryId;
   late String _query;
-  bool _topRated = false;
+  bool _lowestPrice = false;
   bool _minRating = false;
 
   @override
@@ -30,7 +30,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
 
   List<Trainer> _filtered() {
     final q = _query.toLowerCase();
-    final list = kTrainers.where((t) {
+    final list = AppScope.of(context).trainers.where((t) {
       if (_categoryId != null && t.categoryId != _categoryId) return false;
       if (_minRating && t.rating < 4.5) return false;
       if (q.isEmpty) return true;
@@ -38,7 +38,9 @@ class _ResultsScreenState extends State<ResultsScreen> {
       return [t.name.en, t.name.ar, t.area.en, t.area.ar, c.name.en, c.name.ar]
           .any((v) => v.toLowerCase().contains(q));
     }).toList();
-    list.sort((a, b) => _topRated ? b.rating.compareTo(a.rating) : a.distanceKm.compareTo(b.distanceKm));
+    list.sort((a, b) => _lowestPrice
+        ? a.pricePerSession.compareTo(b.pricePerSession)
+        : b.rating.compareTo(a.rating));
     return list;
   }
 
@@ -100,8 +102,8 @@ class _ResultsScreenState extends State<ResultsScreen> {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 20),
               children: [
-                chip(app.t('nearest'), !_topRated, () => setState(() => _topRated = false)),
-                chip(app.t('topRated'), _topRated, () => setState(() => _topRated = true)),
+                chip(app.t('topRated'), !_lowestPrice, () => setState(() => _lowestPrice = false)),
+                chip(app.t('lowestPrice'), _lowestPrice, () => setState(() => _lowestPrice = true)),
                 chip(app.t('rating45'), _minRating, () => setState(() => _minRating = !_minRating)),
               ],
             ),
